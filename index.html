@@ -531,7 +531,13 @@ ul.messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direc
     var opt = { method: method, headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" } };
     if (body) { opt.body = JSON.stringify(body); opt.headers.Prefer = "return=minimal"; }
     return fetch(SUPABASE_URL + "/rest/v1/messages" + query, opt).then(function (r) {
-      if (!r.ok) throw new Error("http " + r.status);
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          var m = "";
+          try { m = JSON.parse(t).message || ""; } catch (e) { m = String(t).slice(0, 160); }
+          throw new Error("HTTP " + r.status + (m ? " : " + m : ""));
+        });
+      }
       return method === "GET" ? r.json() : null;
     });
   }
@@ -553,8 +559,8 @@ ul.messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direc
             return { text: m.text, ts: m.ts, geo: { city: m.city, country: m.country } };
           }));
         })
-        .catch(function () {
-          if (!stopped && !loaded) $("inbox-count").textContent = "Impossible de lire les messages pour le moment. Réessaie dans un instant.";
+        .catch(function (err) {
+          if (!stopped && !loaded) $("inbox-count").textContent = "Lecture impossible : " + (err && err.message ? err.message : "erreur inconnue");
         });
     }
     load();
@@ -623,13 +629,8 @@ ul.messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direc
       st.textContent = "Message envoyé à " + to + ".";
       $("send-text").value = "";
     }).catch(function (err) {
-      var code = err && err.code;
       st.className = "status err";
-      st.textContent = code === "invalid_argument"
-        ? "Envoi refusé : ton compte n'a pas le droit d'écrire sur cette page."
-        : code === "quota_exceeded"
-          ? "La base est pleine. Supprime d'anciens messages avant de réessayer."
-          : "L'envoi a échoué. Réessaie dans un instant.";
+      st.textContent = "L'envoi a échoué : " + (err && err.message ? err.message : "erreur inconnue");
     }).then(function () { sending = false; $("send-btn").disabled = false; });
   });
 
