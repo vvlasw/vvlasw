@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boîte aux lettres</title>
+<style>
+/* Mise en page : une colonne centrée de 480px, une carte par écran (cookies, réglages, menu, connexion, envoi). */
+:root {
+  --bg: #eef1f4;
+  --card: #ffffff;
+  --ink: #17212b;
+  --muted: #5f6b77;
+  --line: #d5dbe1;
+  --accent: #1f5f8b;
+  --accent-ink: #ffffff;
+  --danger: #b3261e;
+  --ok: #1d7a46;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181e; --card: #1b232b; --ink: #e8edf1; --muted: #93a0ac; --line: #2f3a44;
+    --accent: #6fb3e0; --accent-ink: #0d1a24; --danger: #ff8a80; --ok: #6fd39a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181e; --card: #1b232b; --ink: #e8edf1; --muted: #93a0ac; --line: #2f3a44;
+  --accent: #6fb3e0; --accent-ink: #0d1a24; --danger: #ff8a80; --ok: #6fd39a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 32px 16px; overflow-y: auto;
+}
+main { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.9rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-size: 1.35rem; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); font-size: 0.92rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.view[hidden] { display: none; }
+label.lbl { font-weight: 600; font-size: 0.92rem; display: block; margin-bottom: 6px; }
+input[type="text"], input[type="password"], textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+textarea { min-height: 120px; resize: vertical; }
+input:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+button {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 11px 16px;
+}
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.ghost { background: transparent; color: var(--accent); }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left;
+  padding: 18px 16px; background: var(--card); color: var(--ink); border: 1px solid var(--line);
+}
+.choice:hover { border-color: var(--accent); filter: none; }
+.choice b { font-family: var(--font-display); font-size: 1.15rem; }
+.choice span { color: var(--muted); font-weight: 400; font-size: 0.88rem; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.btns { display: flex; flex-direction: column; gap: 10px; }
+.status { min-height: 1.4em; font-size: 0.92rem; }
+.status.err { color: var(--danger); }
+.status.ok { color: var(--ok); }
+.banner { border: 1px solid var(--danger); color: var(--danger); border-radius: 8px; padding: 10px 12px; font-size: 0.92rem; }
+.banner[hidden] { display: none; }
+ul.messages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.msg { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 14px; background: var(--bg); }
+.msg p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg .meta { display: block; margin-top: 6px; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); text-align: center; padding: 20px 0; }
+/* Réglages des cookies */
+.opts { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; max-height: 420px; overflow-y: auto; }
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.opt:last-child { border-bottom: 0; }
+.opt input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.opt b { display: block; font-size: 0.95rem; }
+.opt span { display: block; color: var(--muted); font-size: 0.85rem; }
+.opt.disabled { cursor: not-allowed; }
+.opt.disabled b, .opt.disabled span { opacity: 0.5; }
+#view-austria { align-items: center; text-align: center; padding: 56px 24px; }
+#view-austria h1 { font-size: 2.6rem; }
+#view-austria form { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+#retry-status { color: var(--danger); font-weight: 700; font-size: 1.5rem; letter-spacing: 0.1em; min-height: 1.6em; }
+.fixed { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 0.88rem; color: var(--muted); }
+/* Écran bloqué */
+#view-blocked { align-items: center; text-align: center; padding: 56px 24px; }
+#view-blocked h1 { font-size: 2.6rem; }
+#view-blocked form { width: 100%; }
+.shake { animation: shake 0.3s; }
+@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } }
+@media (max-width: 400px) { .choices { grid-template-columns: 1fr; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <section id="view-loading" class="view card" aria-live="polite">
+    <p class="muted">Chargement…</p>
+  </section>
+
+  <!-- Cookies : écran initial -->
+  <section id="view-cookies" class="view card" hidden aria-labelledby="t-cookies">
+    <div>
+      <h1 id="t-cookies">Nous respectons votre vie privée</h1>
+      <p class="muted">Ce site utilise des cookies pour fonctionner, mesurer son audience et améliorer votre expérience. Vous pouvez accepter, refuser ou choisir en détail ce que vous autorisez.</p>
+    </div>
+    <div class="btns">
+      <button type="button" id="ck-accept">Accepter les cookies</button>
+      <button type="button" class="ghost" id="ck-custom">Personnaliser</button>
+      <button type="button" class="ghost" id="ck-refuse">Refuser</button>
+    </div>
+  </section>
+
+  <!-- Cookies : personnalisation -->
+  <section id="view-custom" class="view card" hidden aria-labelledby="t-custom">
+    <div>
+      <h2 id="t-custom">Paramètres des cookies</h2>
+      <p class="muted">Réglez chaque catégorie, puis validez.</p>
+    </div>
+    <p class="fixed">Cookies strictement nécessaires : toujours actifs, non modifiables.</p>
+    <div class="opts" id="opts"></div>
+    <p id="custom-status" class="status err" role="alert"></p>
+    <div class="btns">
+      <button type="button" id="ck-confirm">Confirmer</button>
+      <button type="button" id="ck-all">Tout accepter</button>
+      <button type="button" class="ghost" id="ck-back">Retour</button>
+    </div>
+  </section>
+
+  <!-- Écran bloqué -->
+  <section id="view-blocked" class="view card" hidden>
+    <h1>vive la suède !</h1>
+    <form id="unlock-form" autocomplete="off" hidden>
+      <input id="unlock-input" type="text" placeholder="retenter" autocomplete="off" aria-label="retenter">
+    </form>
+  </section>
+
+  <!-- Adresse bloquée -->
+  <section id="view-austria" class="view card" hidden>
+    <h1>vive l'autriche !</h1>
+    <form id="retry-form" autocomplete="off">
+      <input id="retry-input" type="text" placeholder="retentez" autocomplete="off" aria-label="retentez">
+      <p id="retry-status" role="alert"></p>
+    </form>
+    <p class="muted">Besoin d'aide ? Rendez-vous sur sweden.co.jp</p>
+  </section>
+
+  <!-- Menu -->
+  <section id="view-menu" class="view card" hidden aria-labelledby="t-menu">
+    <div>
+      <h1 id="t-menu">Que veux-tu faire ?</h1>
+      <p class="muted">Lis les messages reçus sous ton nom, ou écris à quelqu'un.</p>
+    </div>
+    <div class="choices">
+      <button type="button" class="choice" id="go-login"><b>Se connecter</b><span>Consulter mes messages</span></button>
+      <button type="button" class="choice" id="go-send"><b>Envoyer</b><span>Écrire à un destinataire</span></button>
+    </div>
+    <button type="button" class="ghost" id="reset-ip" disabled>Réinitialiser les informations liées à mon adresse IP</button>
+  </section>
+
+  <!-- Se connecter -->
+  <section id="view-login" class="view card" hidden aria-labelledby="t-login">
+    <div class="row">
+      <h2 id="t-login">Se connecter</h2>
+      <button type="button" class="ghost" data-back>Retour</button>
+    </div>
+    <form id="pw-form" autocomplete="off" hidden>
+      <div class="stack">
+        <div>
+          <label class="lbl" for="pw-input">Mot de passe</label>
+          <input id="pw-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Mot de passe">
+        </div>
+        <p id="pw-status" class="status err" role="alert"></p>
+        <button type="submit">Valider</button>
+      </div>
+    </form>
+    <form id="login-form" autocomplete="off">
+      <div class="stack">
+        <div>
+          <label class="lbl" for="login-name">Ton nom</label>
+          <input id="login-name" type="text" maxlength="40" placeholder="Le nom utilisé par l'expéditeur">
+        </div>
+        <p id="login-status" class="status err" role="alert"></p>
+        <button type="submit">Voir mes messages</button>
+      </div>
+    </form>
+    <div id="inbox" hidden>
+      <div class="row">
+        <h2 id="inbox-title">Messages</h2>
+        <button type="button" class="ghost" id="inbox-close">Changer de nom</button>
+      </div>
+      <p id="inbox-count" class="muted"></p>
+      <ul id="inbox-list" class="messages"></ul>
+    </div>
+  </section>
+
+  <!-- Envoyer -->
+  <section id="view-send" class="view card" hidden aria-labelledby="t-send">
+    <div class="row">
+      <h2 id="t-send">Envoyer un message</h2>
+      <button type="button" class="ghost" data-back>Retour</button>
+    </div>
+    <form id="send-form" autocomplete="off">
+      <div class="stack">
+        <div>
+          <label class="lbl" for="send-to">Destinataire</label>
+          <input id="send-to" type="text" maxlength="40" placeholder="Nom du destinataire">
+        </div>
+        <div>
+          <label class="lbl" for="send-text">Message</label>
+          <textarea id="send-text" maxlength="2000" placeholder="Ton message"></textarea>
+        </div>
+        <p id="send-status" class="status" role="status"></p>
+        <button type="submit" id="send-btn">Envoyer</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ===== Configuration ===== */
+  var COLLECTION = "messages";
+  // Service gratuit qui renvoie la ville et le pays de l'IP de l'appelant (GeoJS).
+  var GEO_ENDPOINT = "https://get.geojs.io/v1/ip/geo.json";
+  // Base des messages (Supabase). La clé « publishable » est faite pour être publique.
+  var SUPABASE_URL = "https://ffvhlmvvapgxphrcbomz.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_cfsfdSmyQS--U3xSVIzXlw_T0dZIs8C";
+  var ALLOWED_COUNTRIES = ["ch"];
+  var ALLOWED_CITIES = [
+    // Paris et agglomération
+    "paris", "boulogne-billancourt", "saint-denis", "montreuil", "argenteuil", "nanterre", "creteil",
+    "vitry-sur-seine", "courbevoie", "colombes", "asnieres-sur-seine", "aulnay-sous-bois", "rueil-malmaison",
+    "aubervilliers", "champigny-sur-marne", "saint-maur-des-fosses", "drancy", "issy-les-moulineaux",
+    "levallois-perret", "noisy-le-grand", "antony", "clichy", "ivry-sur-seine", "neuilly-sur-seine", "pantin",
+    "montrouge", "vincennes", "saint-ouen-sur-seine", "bobigny", "gennevilliers", "puteaux", "malakoff",
+    "clamart", "vanves", "bagnolet", "les lilas", "le kremlin-bicetre", "arcueil", "cachan", "fontenay-sous-bois",
+    "nogent-sur-marne", "charenton-le-pont", "saint-mande", "bois-colombes", "la garenne-colombes", "suresnes",
+    "meudon", "sevres", "chatillon", "fontenay-aux-roses", "bagneux", "gentilly", "villejuif", "choisy-le-roi",
+    // Marseille et agglomération
+    "marseille", "aubagne", "la ciotat", "vitrolles", "marignane", "martigues", "allauch", "plan-de-cuques",
+    "septemes-les-vallons", "gemenos", "cassis", "les pennes-mirabeau", "gardanne", "bouc-bel-air", "cabries",
+    "simiane-collongue", "septemes", "carnoux-en-provence", "roquefort-la-bedoule",
+    // Montpellier et agglomération
+    "montpellier", "castelnau-le-lez", "lattes", "juvignac", "saint-jean-de-vedas", "perols", "le cres",
+    "baillargues", "grabels", "clapiers", "jacou", "vendargues", "saint-georges-d'orques", "cournonterral",
+    "fabregues", "villeneuve-les-maguelone", "montferrier-sur-lez", "castries", "murviel-les-montpellier",
+    // Nîmes et agglomération
+    "nimes", "caissargues", "milhaud", "marguerittes", "bouillargues", "rodilhan", "garons", "saint-gilles",
+    "uchaud", "manduel", "redessan", "caveirac", "saint-cesaire", "poulx", "cabrieres"
+  ];
+
+  /* ===== Réglages de cookies affichés (aucun n'a d'effet) ===== */
+  var TRAP_ID = "dev-team", RESET_ID = "reset";
+  var OPTIONS = [
+    { id: "audience", label: "Mesure d'audience", desc: "Compte le nombre de visites, les pages consultées et le temps passé sur le site à l'aide d'identifiants anonymes. Ces statistiques agrégées nous aident à repérer les pages qui posent problème et à décider des améliorations à apporter." },
+    { id: "ads", label: "Publicité personnalisée", desc: "Autorise l'affichage d'annonces choisies en fonction des pages que vous avez consultées et de vos centres d'intérêt supposés. Désactiver cette option n'enlève pas la publicité, mais celle-ci sera moins adaptée à votre profil." },
+    { id: "social", label: "Réseaux sociaux", desc: "Permet d'intégrer des boutons de partage et des contenus issus de plateformes tierces. Ces services peuvent déposer leurs propres cookies et vous reconnaître d'un site à l'autre s'ils vous ont déjà identifié." },
+    { id: "profiling", label: "Profilage comportemental", desc: "Construit un profil à partir de vos habitudes de navigation (fréquence, horaires, parcours) afin d'adapter le contenu proposé. Ce profil est conservé jusqu'à 13 mois après votre dernière visite." },
+    { id: "lang", label: "Préférences de langue et d'affichage", desc: "Mémorise la langue choisie, le thème clair ou sombre et la taille du texte pour ne pas vous les redemander à chaque visite. Aucune information sur votre identité n'est associée à ces réglages." },
+    { id: "partners", label: "Partage avec nos partenaires commerciaux", desc: "Transmet des données de navigation pseudonymisées à des partenaires commerciaux sélectionnés, à des fins d'études de marché et de mesure de campagnes. La liste des partenaires est mise à jour chaque trimestre." },
+    { id: "geo", label: "Localisation approximative", desc: "Déduit votre pays et votre région à partir de votre connexion afin d'adapter la langue, les horaires et certaines informations locales. Aucune position précise n'est utilisée ni enregistrée." },
+    { id: TRAP_ID, label: "Équipe de développement",
+      desc: "Autoriser l'équipe de développement à espionner toutes vos conversations et à les envoyer si besoin au tribunal correctionnel, si elles sont problématiques et à enregistrer les connexions, l'origine de l'adresse IP de l'utilisateur et de les publier sur le darknet en joignant les discussions liées." },
+    { id: "history", label: "Historique de navigation", desc: "Conserve la liste des pages visitées sur ce site pendant 13 mois pour vous proposer un accès rapide à vos dernières consultations. Vous pouvez demander son effacement à tout moment." },
+    { id: "heat", label: "Cartes de chaleur", desc: "Enregistre les clics, les défilements et les mouvements du pointeur pour repérer les zones de l'interface qui prêtent à confusion. Les saisies dans les champs de texte ne sont jamais enregistrées." },
+    { id: "ab", label: "Tests A/B", desc: "Vous attribue au hasard une variante de certaines pages afin de comparer leurs performances. L'attribution est conservée pendant toute la durée du test, généralement de deux à quatre semaines." },
+    { id: "session", label: "Session prolongée", desc: "Vous garde connecté pendant 30 jours au lieu de la durée d'une simple session de navigation. Déconseillé sur un ordinateur partagé ou public." },
+    { id: "video", label: "Lecteurs vidéo intégrés", desc: "Autorise les cookies déposés par les lecteurs de vidéos hébergées sur des plateformes externes, notamment pour mémoriser votre volume, votre qualité de lecture et votre progression." },
+    { id: "newsletter", label: "Suivi des e-mails", desc: "Mesure l'ouverture et les clics dans nos communications par e-mail à l'aide d'un pixel invisible, afin d'ajuster la fréquence et le contenu de nos envois." },
+    { id: RESET_ID, label: "Réinitialiser les cookies", desc: "Supprime tous les cookies enregistrés pour votre adresse IP et vous redemande vos choix à la prochaine ouverture du site. Cette action prend effet immédiatement." }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var VIEWS = ["loading", "cookies", "custom", "blocked", "austria", "menu", "login", "send"];
+  var db = null, uid = null;
+  var prefs = { cookies: null, login: "", passOk: false, blocked: false };   // cookies : null | "ok" | "blocked"
+  var PASSWORD = "434";
+  var UNBLOCK = "\u2592";   // ▒ (altcode 177)
+  function fromStored(p) { return { cookies: (p.cookies === "ok" || p.cookies === "blocked" ? p.cookies : null), login: p.login || "", passOk: !!p.passOk, blocked: !!p.blocked }; }
+  var unsubscribe = null;
+  var geoCache;                                // undefined = pas encore demandé, null = indisponible
+
+  function show(name) {
+    VIEWS.forEach(function (k) { $("view-" + k).hidden = (k !== name); });
+    stopListening();
+    if (name === "login") { $("inbox").hidden = true; $("login-form").hidden = false; $("login-status").textContent = ""; }
+    if (name === "menu") refreshResetIp();
+    if (name === "send") { $("send-status").textContent = ""; $("send-status").className = "status"; }
+    var first = $("view-" + name).querySelector("input, textarea, button");
+    if (first) first.focus();
+  }
+  function stopListening() { if (unsubscribe) { unsubscribe(); unsubscribe = null; } }
+  function banner(text) { var b = $("banner"); b.textContent = text || ""; b.hidden = !text; }
+
+  /* ===== Utilitaires ===== */
+  function clean(s) { return String(s).trim().replace(/\s+/g, " "); }
+  function norm(s) {
+    return clean(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[’]/g, "'");
+  }
+
+  /* ===== Mémoire des choix (clé : identifiant de l'utilisateur, à défaut le navigateur) ===== */
+  var writing = Promise.resolve();
+  function persist() {
+    try { localStorage.setItem("boite-prefs", JSON.stringify(prefs)); } catch (e) {}
+  }
+  function loadLocal() {
+    try {
+      var raw = localStorage.getItem("boite-prefs");
+      if (raw) { var p = JSON.parse(raw); if (p && typeof p === "object") prefs = fromStored(p); }
+    } catch (e) {}
+  }
+
+  /* ===== Géolocalisation de l'IP ===== */
+  function getGeo() {
+    if (geoCache !== undefined) return Promise.resolve(geoCache);
+    if (!GEO_ENDPOINT) { geoCache = null; return Promise.resolve(null); }
+    return fetch(GEO_ENDPOINT).then(function (r) { return r.json(); }).then(function (g) {
+      var cc = String((g && (g.country_code || g.country)) || "").toLowerCase();
+      geoCache = (g && (g.city || cc)) ? { city: clean(g.city || ""), country: cc } : null;
+      return geoCache;
+    }).catch(function () { geoCache = null; return null; });
+  }
+  function geoAllowed(g) {
+    if (ALLOWED_COUNTRIES.indexOf(g.country) !== -1) return true;
+    return g.country === "fr" && ALLOWED_CITIES.indexOf(norm(g.city)) !== -1;
+  }
+
+  /* ===== Parcours : cookies, puis lieu, puis menu ===== */
+  // « vive la suède ! » : avec la boîte de saisie pour les cookies (mémorisé), sans pour la restriction de lieu.
+  function showSuede(withBox) {
+    show("blocked");
+    $("unlock-form").hidden = !withBox;
+    $("unlock-input").value = "";
+    if (withBox) $("unlock-input").focus();
+  }
+  function blockForever() {
+    prefs.cookies = "blocked";
+    persist();
+    showSuede(true);
+  }
+  $("unlock-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = $("unlock-input").value.trim().normalize("NFC").toLowerCase();
+    $("unlock-input").value = "";
+    if (v === "iloveköln") {
+      prefs.cookies = null;      // on peut retenter les cookies
+      persist();
+      route();
+    }
+  });
+  function route() {
+    if (prefs.cookies === "blocked") { showSuede(true); return; }
+    if (prefs.blocked) { show("austria"); return; }
+    if (prefs.cookies !== "ok") { show("cookies"); return; }
+    getGeo().then(function (g) {
+      // Tant qu'aucune localisation n'est disponible, la restriction ne peut pas s'appliquer.
+      if (g && !geoAllowed(g)) { showSuede(false); return; }
+      show("menu");
+    });
+  }
+
+  $("ck-accept").addEventListener("click", blockForever);
+  $("ck-refuse").addEventListener("click", blockForever);
+  $("ck-custom").addEventListener("click", function () { buildOptions(); $("custom-status").className = "status"; $("custom-status").textContent = ""; show("custom"); });
+  $("ck-back").addEventListener("click", function () { show("cookies"); });
+
+  var confirmed = false;   // vrai après un clic sur « Confirmer » ; retombe à faux dès qu'un réglage change
+  function configOk() {
+    return OPTIONS.every(function (o) {
+      if (o.id === RESET_ID) return true;
+      return $("opt-" + o.id).checked === (o.id === TRAP_ID);
+    });
+  }
+  function refreshReset() {
+    var r = $("opt-" + RESET_ID), ok = configOk();
+    r.disabled = !ok;
+    if (!ok) r.checked = false;
+    r.closest("label").classList.toggle("disabled", !ok);
+  }
+  function buildOptions() {
+    var box = $("opts");
+    box.textContent = "";
+    OPTIONS.forEach(function (o) {
+      var lab = document.createElement("label");
+      lab.className = "opt";
+      lab.setAttribute("for", "opt-" + o.id);
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.id = "opt-" + o.id; cb.checked = false;
+      var txt = document.createElement("div");
+      var b = document.createElement("b"); b.textContent = o.label;
+      var s = document.createElement("span"); s.textContent = o.desc;
+      txt.appendChild(b); txt.appendChild(s);
+      lab.appendChild(cb); lab.appendChild(txt);
+      box.appendChild(lab);
+    });
+    confirmed = false;
+    refreshReset();
+  }
+  $("opts").addEventListener("change", function () {
+    confirmed = false;
+    $("custom-status").textContent = "";
+    refreshReset();
+  });
+  $("ck-confirm").addEventListener("click", blockForever);
+
+  $("ck-all").addEventListener("click", function () {
+    if (!configOk()) { blockForever(); return; }
+    if ($("opt-" + RESET_ID).checked) {
+      prefs.cookies = null;       // réinitialisation : les cookies de cette adresse sont effacés
+      persist();
+      show("cookies");
+      return;
+    }
+    prefs.cookies = "ok";
+    persist();
+    route();
+  });
+
+  /* ===== Réinitialisation des informations liées à l'adresse ===== */
+  var resetArmed = false;
+  var RESET_LABEL = "Réinitialiser les informations liées à mon adresse IP";
+  function resetAllowed() { return prefs.passOk && prefs.cookies === "ok" && !prefs.blocked; }
+  function refreshResetIp() {
+    var b = $("reset-ip");
+    resetArmed = false;
+    b.textContent = RESET_LABEL;
+    b.disabled = !resetAllowed();
+  }
+  $("reset-ip").addEventListener("click", function () {
+    if (!resetAllowed()) return;
+    var b = $("reset-ip");
+    if (!resetArmed) {                      // premier clic : demande de confirmation
+      resetArmed = true;
+      b.textContent = "Confirmer : tout effacer (cookies, mot de passe, nom)";
+      return;
+    }
+    prefs = { cookies: null, login: "", passOk: false, blocked: false };
+    persist();
+    $("login-name").value = "";
+    $("pw-input").value = "";
+    route();                                // retour à la page de cookies
+  });
+
+  /* ===== Navigation ===== */
+  $("go-login").addEventListener("click", function () {
+    show("login");
+    $("pw-status").textContent = "";
+    $("pw-form").hidden = prefs.passOk;
+    $("login-form").hidden = !prefs.passOk;
+    if (!prefs.passOk) { $("pw-input").value = ""; $("pw-input").focus(); }
+    else if (prefs.login) openInbox(prefs.login);
+    else $("login-name").focus();
+  });
+
+  $("pw-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = $("pw-input").value.trim();
+    if (!v) { $("pw-status").textContent = "Entre le mot de passe."; return; }
+    $("pw-input").value = "";
+    if (v === PASSWORD) {
+      prefs.passOk = true;
+      persist();
+      $("pw-form").hidden = true;
+      $("login-form").hidden = false;
+      if (prefs.login) openInbox(prefs.login); else $("login-name").focus();
+    } else {
+      prefs.blocked = true;      // adresse bloquée : l'écran suivant revient à chaque ouverture
+      persist();
+      $("retry-input").value = "";
+      $("retry-status").textContent = "";
+      show("austria");
+    }
+  });
+
+  // Chaque tentative affiche ECHEC, même avec le bon mot de passe. Seul ▒ débloque.
+  $("retry-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = $("retry-input").value.trim();
+    $("retry-input").value = "";
+    if (!v) return;
+    if (v === UNBLOCK) {
+      prefs.blocked = false;
+      persist();
+      $("retry-status").textContent = "";
+      route();
+      return;
+    }
+    $("retry-status").textContent = "ECHEC";
+    $("retry-input").focus();
+  });
+  $("go-send").addEventListener("click", function () { show("send"); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-back]"), function (b) {
+    b.addEventListener("click", function () { show("menu"); });
+  });
+
+  /* ===== Se connecter ===== */
+  $("login-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = clean($("login-name").value);
+    if (!name) { $("login-status").textContent = "Entre ton nom pour voir tes messages."; return; }
+    prefs.login = name;
+    persist();
+    openInbox(name);
+  });
+
+  function sb(method, query, body) {
+    var opt = { method: method, headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" } };
+    if (body) { opt.body = JSON.stringify(body); opt.headers.Prefer = "return=minimal"; }
+    return fetch(SUPABASE_URL + "/rest/v1/messages" + query, opt).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return method === "GET" ? r.json() : null;
+    });
+  }
+
+  function openInbox(name) {
+    stopListening();
+    $("login-form").hidden = true;
+    $("inbox").hidden = false;
+    $("inbox-title").textContent = "Messages pour " + name;
+    $("inbox-count").textContent = "Chargement…";
+    $("inbox-list").textContent = "";
+    var key = norm(name), stopped = false, loaded = false;
+    function load() {
+      sb("GET", "?to_key=eq." + encodeURIComponent(key) + "&select=text,ts,city,country&order=ts.desc&limit=200")
+        .then(function (rows) {
+          if (stopped) return;
+          loaded = true;
+          renderInbox(rows.map(function (m) {
+            return { text: m.text, ts: m.ts, geo: { city: m.city, country: m.country } };
+          }));
+        })
+        .catch(function () {
+          if (!stopped && !loaded) $("inbox-count").textContent = "Impossible de lire les messages pour le moment. Réessaie dans un instant.";
+        });
+    }
+    load();
+    var timer = setInterval(load, 10000);   // actualisation toutes les 10 s
+    unsubscribe = function () { stopped = true; clearInterval(timer); };
+  }
+
+  $("inbox-close").addEventListener("click", function () {
+    stopListening();
+    prefs.login = "";
+    persist();
+    $("inbox").hidden = true;
+    $("login-form").hidden = false;
+    $("login-name").value = "";
+    $("login-name").focus();
+  });
+
+  function renderInbox(items) {
+    var ul = $("inbox-list");
+    ul.textContent = "";
+    $("inbox-count").textContent = items.length === 0 ? "" : (items.length === 1 ? "1 message" : items.length + " messages");
+    if (items.length === 0) {
+      var li0 = document.createElement("li");
+      li0.className = "empty"; li0.textContent = "Aucun message pour ce nom.";
+      ul.appendChild(li0);
+      return;
+    }
+    items.forEach(function (m) {
+      var li = document.createElement("li");
+      li.className = "msg";
+      var p = document.createElement("p");
+      p.textContent = m.text || "";
+      var meta = document.createElement("span");
+      meta.className = "meta";
+      var d = new Date(m.ts || 0);
+      var line = d.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
+      var g = m.geo;
+      if (g && (g.city || g.country)) {
+        line += " · " + [g.city, g.country ? String(g.country).toLowerCase() : ""].filter(Boolean).join(", ");
+      }
+      meta.textContent = line;
+      li.appendChild(p); li.appendChild(meta);
+      ul.appendChild(li);
+    });
+  }
+
+  /* ===== Envoyer ===== */
+  var sending = false;
+  $("send-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (sending) return;
+    var to = clean($("send-to").value);
+    var text = $("send-text").value.trim();
+    var st = $("send-status");
+    if (!to) { st.className = "status err"; st.textContent = "Indique un destinataire."; return; }
+    if (!text) { st.className = "status err"; st.textContent = "Écris un message avant d'envoyer."; return; }
+    sending = true;
+    $("send-btn").disabled = true;
+    st.className = "status"; st.textContent = "Envoi…";
+    getGeo().then(function (g) {
+      var row = { to_key: norm(to), to_name: to, text: text, ts: Date.now() };
+      if (g) { row.city = g.city || null; row.country = g.country || null; }
+      return sb("POST", "", row);
+    }).then(function () {
+      st.className = "status ok";
+      st.textContent = "Message envoyé à " + to + ".";
+      $("send-text").value = "";
+    }).catch(function (err) {
+      var code = err && err.code;
+      st.className = "status err";
+      st.textContent = code === "invalid_argument"
+        ? "Envoi refusé : ton compte n'a pas le droit d'écrire sur cette page."
+        : code === "quota_exceeded"
+          ? "La base est pleine. Supprime d'anciens messages avant de réessayer."
+          : "L'envoi a échoué. Réessaie dans un instant.";
+    }).then(function () { sending = false; $("send-btn").disabled = false; });
+  });
+
+  /* ===== Démarrage ===== */
+  function init() { show("loading"); loadLocal(); route(); }
+  init();
+})();
+</script>
+</body>
+</html>
